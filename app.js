@@ -9,6 +9,7 @@ let pdfFiles = [];
 let originalFiles = [];
 let signedFiles = [];
 let signedFolderId = null;
+const ACTIVE_FOLDER_ID = "1fWtxiMw7mbxUfH4yQvxjcVDbSwYXacZc";
 let currentFile = null;
 let currentPdfBytes = null;
 let autoLoginAttempted = false;
@@ -260,12 +261,21 @@ async function refreshFiles(){
 }
 
 async function loadFiles(){
+  console.info("CaneNext active Google Drive folder:", ACTIVE_FOLDER_ID);
   if(!accessToken){ toast("กรุณาเข้าสู่ระบบก่อน"); return; }
   els.fileList.textContent = "กำลังดึงไฟล์...";
   try{
-    signedFolderId = await ensureSignedFolder();
-    originalFiles = await listPdfInFolder(CONFIG.FOLDER_ID);
-    signedFiles = await listPdfInFolder(signedFolderId);
+    // ดึง PDF จากโฟลเดอร์หลักก่อน เพื่อให้แสดงไฟล์ได้แม้ไม่มีสิทธิ์สร้างโฟลเดอร์ Signed
+    originalFiles = await listPdfInFolder(ACTIVE_FOLDER_ID);
+    try {
+      signedFolderId = await ensureSignedFolder();
+      signedFiles = await listPdfInFolder(signedFolderId);
+    } catch (signedErr) {
+      console.warn("Cannot access/create signed folder", signedErr);
+      signedFolderId = null;
+      signedFiles = [];
+      toast("ดึง PDF จากโฟลเดอร์หลักแล้ว แต่ยังสร้าง/เข้าถึงโฟลเดอร์ไฟล์เซ็นไม่ได้");
+    }
     pdfFiles = mapStatus(originalFiles, signedFiles);
     updateSubZoneOptions();
     renderFiles(); updateSummary();
@@ -300,7 +310,7 @@ async function ensureSignedFolder(){
   const folderName = CONFIG.SIGNED_FOLDER_NAME || "02_Signed_PDF";
   const safeName = folderName.replace(/'/g, "\'");
   const res = await gapi.client.drive.files.list({
-    q: `'${CONFIG.FOLDER_ID}' in parents and name='${safeName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+    q: `'${ACTIVE_FOLDER_ID}' in parents and name='${safeName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
     fields: "files(id,name)",
     pageSize: 10,
     supportsAllDrives: true,
@@ -315,7 +325,7 @@ async function ensureSignedFolder(){
     body: JSON.stringify({
       name: folderName,
       mimeType: "application/vnd.google-apps.folder",
-      parents: [CONFIG.FOLDER_ID]
+      parents: [ACTIVE_FOLDER_ID]
     })
   });
   if(!createRes.ok) throw new Error(await createRes.text());
@@ -746,7 +756,7 @@ async function saveSignedPdf(){
 }
 async function uploadToDrive(name, bytes){
   const boundary = "canenext_boundary_" + Date.now();
-  const metadata = { name, mimeType: "application/pdf", parents: [signedFolderId || CONFIG.FOLDER_ID] };
+  const metadata = { name, mimeType: "application/pdf", parents: [signedFolderId || ACTIVE_FOLDER_ID] };
   const body = new Blob([
     `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`,
     `--${boundary}\r\nContent-Type: application/pdf\r\n\r\n`,
