@@ -32,12 +32,17 @@ const els = {
 };
 
 window.addEventListener("load", () => {
-  initSignaturePad();
-  bindEvents();
-  loadGapi();
-  waitForGIS();
-  setButtons(false);
-  renderDefaultSummaryTableIfEmpty();
+  try {
+    initSignaturePad();
+    bindEvents();
+    setButtons(false);
+    renderDefaultSummaryTableIfEmpty();
+    initializeGoogleApis();
+  } catch (err) {
+    console.error("Application initialization failed", err);
+    if (els.userStatus) els.userStatus.textContent = "ระบบเริ่มต้นไม่สำเร็จ กรุณารีเฟรชหน้าเว็บ";
+    if (els.loginBtn) els.loginBtn.disabled = false;
+  }
 });
 
 function bindEvents(){
@@ -114,41 +119,86 @@ function resizeSignatureCanvas(){
   if(signaturePad){ signaturePad.clear(); if(data) signaturePad.fromData(data); }
 }
 
-function loadGapi(){
-  gapi.load("client", async () => {
+async function waitForLibrary(checkFn, timeoutMs = 15000){
+  const started = Date.now();
+  while(Date.now() - started < timeoutMs){
+    try { if(checkFn()) return true; } catch (_) {}
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
+  return false;
+}
+
+async function initializeGoogleApis(){
+  els.userStatus.textContent = "กำลังโหลดระบบเข้าสู่ระบบ...";
+  const [hasGapi, hasGIS] = await Promise.all([
+    waitForLibrary(() => window.gapi && typeof window.gapi.load === "function"),
+    waitForLibrary(() => window.google && google.accounts && google.accounts.oauth2)
+  ]);
+
+  if(!hasGapi || !hasGIS){
+    console.error("Google libraries unavailable", { hasGapi, hasGIS });
+    els.userStatus.textContent = "โหลด Google Login ไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วกดเข้าสู่ระบบอีกครั้ง";
+    els.loginBtn.disabled = false;
+    return;
+  }
+
+  try {
+    await new Promise((resolve, reject) => {
+      gapi.load("client", {
+        callback: resolve,
+        onerror: () => reject(new Error("โหลด Google API client ไม่สำเร็จ")),
+        timeout: 10000,
+        ontimeout: () => reject(new Error("Google API client ใช้เวลาโหลดนานเกินไป"))
+      });
+    });
     await gapi.client.init({ discoveryDocs: [CONFIG.DISCOVERY_DOC] });
     gapiReady = true;
+
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CONFIG.CLIENT_ID,
+      scope: CONFIG.SCOPES,
+      callback: handleTokenResponse,
+      error_callback: (err) => {
+        console.error("Google OAuth error", err);
+        els.userStatus.textContent = "เข้าสู่ระบบไม่สำเร็จ";
+        setButtons(false);
+        toast("Google Login ถูกยกเลิกหรือถูกบล็อก กรุณาอนุญาต Pop-up แล้วลองใหม่");
+      }
+    });
+    gisReady = true;
+    els.userStatus.textContent = "พร้อมเข้าสู่ระบบ";
     setButtons(isLoggedIn());
     maybeAutoLogin();
-  });
+  } catch(err){
+    console.error("Google API initialization failed", err);
+    gapiReady = false;
+    gisReady = false;
+    els.userStatus.textContent = "เชื่อมต่อ Google API ไม่สำเร็จ";
+    els.loginBtn.disabled = false;
+    toast(err.message || "เชื่อมต่อ Google API ไม่สำเร็จ");
+  }
 }
-function waitForGIS(){
-  const timer = setInterval(() => {
-    if(window.google && google.accounts && google.accounts.oauth2){
-      clearInterval(timer);
-      tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: CONFIG.CLIENT_ID,
-        scope: CONFIG.SCOPES,
-        callback: (tokenResponse) => {
-          if(tokenResponse && tokenResponse.access_token){
-            accessToken = tokenResponse.access_token;
-            localStorage.setItem("canenext_login_active", "1");
-            gapi.client.setToken({ access_token: accessToken });
-            els.userStatus.textContent = "เข้าสู่ระบบแล้ว";
-            els.loginBtn.classList.add("hidden");
-            els.logoutBtn.classList.remove("hidden");
-            setButtons(true);
-            toast(tokenResponse.prompt === "none" ? "กลับเข้าสู่ระบบอัตโนมัติ" : "เข้าสู่ระบบสำเร็จ");
-            loadFiles();
-          }
-        }
-      });
-      gisReady = true;
-      setButtons(isLoggedIn());
-      maybeAutoLogin();
-    }
-  }, 200);
+
+function handleTokenResponse(tokenResponse){
+  if(tokenResponse && tokenResponse.error){
+    console.error("OAuth token error", tokenResponse);
+    els.userStatus.textContent = "เข้าสู่ระบบไม่สำเร็จ";
+    toast(tokenResponse.error_description || tokenResponse.error);
+    return;
+  }
+  if(tokenResponse && tokenResponse.access_token){
+    accessToken = tokenResponse.access_token;
+    localStorage.setItem("canenext_login_active", "1");
+    gapi.client.setToken({ access_token: accessToken });
+    els.userStatus.textContent = "เข้าสู่ระบบแล้ว";
+    els.loginBtn.classList.add("hidden");
+    els.logoutBtn.classList.remove("hidden");
+    setButtons(true);
+    toast("เข้าสู่ระบบสำเร็จ");
+    loadFiles();
+  }
 }
+
 function isLoggedIn(){
   return !!accessToken;
 }
@@ -175,9 +225,23 @@ function maybeAutoLogin(){
     localStorage.removeItem("canenext_login_active");
   }
 }
-function login(){
-  if(!tokenClient){ toast("Google API ยังโหลดไม่เสร็จ"); return; }
-  tokenClient.requestAccessToken({ prompt: "consent" });
+async function login(){
+  if(!tokenClient || !gapiReady || !gisReady){
+    els.loginBtn.disabled = true;
+    await initializeGoogleApis();
+  }
+  if(!tokenClient){
+    els.loginBtn.disabled = false;
+    toast("ยังเชื่อมต่อ Google Login ไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตหรือการบล็อกสคริปต์");
+    return;
+  }
+  try{
+    tokenClient.requestAccessToken({ prompt: accessToken ? "" : "consent" });
+  }catch(err){
+    console.error("Login request failed", err);
+    els.loginBtn.disabled = false;
+    toast("เปิดหน้าต่างเข้าสู่ระบบไม่ได้ กรุณาอนุญาต Pop-up");
+  }
 }
 function logout(){
   if(accessToken) google.accounts.oauth2.revoke(accessToken);
