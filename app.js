@@ -266,7 +266,7 @@ async function loadFiles(){
   els.fileList.textContent = "กำลังดึงไฟล์...";
   try{
     // ดึง PDF จากโฟลเดอร์หลักก่อน เพื่อให้แสดงไฟล์ได้แม้ไม่มีสิทธิ์สร้างโฟลเดอร์ Signed
-    originalFiles = await listPdfInFolder(ACTIVE_FOLDER_ID);
+    originalFiles = await listPdfInFolder(ACTIVE_FOLDER_ID, true);
     try {
       signedFolderId = await ensureSignedFolder();
       signedFiles = await listPdfInFolder(signedFolderId);
@@ -287,22 +287,45 @@ async function loadFiles(){
   }
 }
 
-async function listPdfInFolder(folderId){
-  let all = []; let pageToken;
-  do{
-    const res = await gapi.client.drive.files.list({
-      q: `'${folderId}' in parents and mimeType='application/pdf' and trashed=false`,
-      fields: "nextPageToken, files(id,name,mimeType,modifiedTime,size,webViewLink,parents)",
-      orderBy: "modifiedTime desc",
-      pageSize: 100,
-      pageToken,
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true
-    });
-    all = all.concat(res.result.files || []);
-    pageToken = res.result.nextPageToken;
-  }while(pageToken);
-  return all;
+async function listPdfInFolder(folderId, recursive = false){
+  const pdfs = [];
+  const queue = [folderId];
+  const visited = new Set();
+  const signedFolderName = CONFIG.SIGNED_FOLDER_NAME || "02_Signed_PDF";
+
+  while(queue.length){
+    const currentFolderId = queue.shift();
+    if(!currentFolderId || visited.has(currentFolderId)) continue;
+    visited.add(currentFolderId);
+
+    let pageToken;
+    do{
+      const res = await gapi.client.drive.files.list({
+        q: `'${currentFolderId}' in parents and trashed=false`,
+        fields: "nextPageToken, files(id,name,mimeType,modifiedTime,size,webViewLink,parents)",
+        orderBy: "modifiedTime desc",
+        pageSize: 1000,
+        pageToken,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
+      });
+
+      for(const file of (res.result.files || [])){
+        if(file.mimeType === "application/pdf"){
+          pdfs.push(file);
+        }else if(
+          recursive &&
+          file.mimeType === "application/vnd.google-apps.folder" &&
+          file.name !== signedFolderName
+        ){
+          queue.push(file.id);
+        }
+      }
+      pageToken = res.result.nextPageToken;
+    }while(pageToken);
+  }
+
+  return pdfs.sort((a,b) => String(b.modifiedTime || "").localeCompare(String(a.modifiedTime || "")));
 }
 
 async function ensureSignedFolder(){
