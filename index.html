@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CaneNext : Online Signature System</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="https://apis.google.com/js/api.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>CaneNext</h1>
+      <div class="subtitle">Online Signature System</div>
+    </div>
+    <div class="auth-area">
+      <span id="userStatus" class="user-status">ยังไม่ได้เข้าสู่ระบบ</span>
+      <button id="loginBtn" class="btn primary">เข้าสู่ระบบ</button>
+      <button id="logoutBtn" class="btn ghost hidden">ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-page="documents">เอกสาร PDF</button>
+    <button class="tab" data-page="summary">สรุปสถานะเอกสาร</button>
+  </nav>
+
+  <main class="layout">
+    <section id="documentsPage" class="page active">
+      <div class="panel toolbar">
+        <button id="loadFilesBtn" class="btn primary">ดึงไฟล์ PDF</button>
+        <button id="refreshFilesBtn" class="btn ghost" type="button">รีเฟรชรายการ</button>
+        <input id="searchInput" type="search" placeholder="ค้นหาชื่อไฟล์ PDF" />
+        <select id="zoneFilter" title="กรองตามเขต">
+          <option value="all">ทุกเขต</option>
+          <option value="01">เขต 01</option>
+          <option value="02">เขต 02</option>
+          <option value="03">เขต 03</option>
+          <option value="04">เขต 04</option>
+          <option value="05">เขต 05</option>
+          <option value="06">เขต 06</option>
+          <option value="07">เขต 07</option>
+          <option value="08">เขต 08</option>
+          <option value="09">เขต 09</option>
+          <option value="10">เขต 10</option>
+          <option value="11">เขต 11</option>
+          <option value="12">เขต 12</option>
+          <option value="ไม่ระบุ">ไม่ระบุเขต</option>
+        </select>
+        <select id="subZoneFilter" title="กรองตามเขตย่อย">
+          <option value="all">ทุกเขตย่อย</option>
+        </select>
+        <button id="clearSearchBtn" class="btn ghost" type="button">ล้างการค้นหา</button>
+        <select id="statusFilter" class="hidden" aria-hidden="true">
+          <option value="all">ทั้งหมด</option>
+          <option value="unsigned">ยังไม่เซ็น</option>
+          <option value="signed">เซ็นแล้ว</option>
+        </select>
+      </div>
+
+      <div class="content-grid">
+        <aside class="panel file-panel">
+          <h2>รายการเอกสาร PDF</h2>
+          <div class="doc-filter-tabs" role="tablist" aria-label="ตัวกรองสถานะเอกสาร">
+            <button class="doc-filter active" type="button" data-status="all">ทั้งหมด <span id="tabAllCount">0</span></button>
+            <button class="doc-filter" type="button" data-status="signed">เซ็นแล้ว <span id="tabSignedCount">0</span></button>
+            <button class="doc-filter" type="button" data-status="unsigned">ยังไม่เซ็น <span id="tabUnsignedCount">0</span></button>
+          </div>
+          <div id="fileListInfo" class="file-list-info">แสดงเอกสารทั้งหมด</div>
+          <div id="fileList" class="file-list empty">กรุณาเข้าสู่ระบบ แล้วกดดึงไฟล์ PDF</div>
+        </aside>
+
+        <section class="panel viewer-panel">
+          <div class="viewer-top">
+            <div>
+              <h2 id="currentFileName">ยังไม่ได้เลือกไฟล์</h2>
+              <span id="docStatus" class="badge muted">-</span>
+            </div>
+            <div class="page-control">
+              <button id="prevPageBtn" class="btn small">ก่อนหน้า</button>
+              <span id="pageInfo">หน้า - / -</span>
+              <button id="nextPageBtn" class="btn small">ถัดไป</button>
+            </div>
+          </div>
+
+          <div id="pdfWrap" class="pdf-wrap">
+            <canvas id="pdfCanvas"></canvas>
+          </div>
+
+          <div class="sign-section">
+            <h3>พื้นที่ลงลายเซ็น</h3>
+            <canvas id="signatureCanvas"></canvas>
+            <div class="sign-options">
+              <input id="signPageInput" type="hidden" min="1" value="1" />
+              <select id="signaturePosition" class="hidden" aria-hidden="true">
+                <option value="bottom-right">ล่างขวา</option>
+              </select>
+              <div class="sign-note">ตำแหน่งบันทึก: หน้าแรก · มุมขวาบนสุด</div>
+              <button id="clearSigBtn" class="btn ghost">ล้างลายเซ็น</button>
+              <button id="saveSignedBtn" class="btn success">บันทึกลายเซ็นลง PDF</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+
+    <section id="summaryPage" class="page">
+      <div class="summary-hero panel">
+        <div class="summary-title">
+          <div class="summary-icon-main">📊</div>
+          <div>
+            <h2>สรุปสถานะเอกสาร</h2>
+            <p id="summaryHint">ภาพรวมความก้าวหน้าการลงลายเซ็น PDF</p>
+          </div>
+        </div>
+        <div class="overall-progress">
+          <div class="overall-percent" id="completionPercent">0%</div>
+          <div class="overall-label">ความก้าวหน้ารวม</div>
+          <div class="overall-bar"><span id="completionBar" style="width:0%"></span></div>
+        </div>
+      </div>
+
+      <div class="summary-cards">
+        <div class="summary-card total-card">
+          <div class="card-icon">📄</div>
+          <div class="card-label">ไฟล์ต้นฉบับทั้งหมด</div>
+          <strong id="totalCount">0</strong>
+        </div>
+        <div class="summary-card signed-card">
+          <div class="card-icon">✅</div>
+          <div class="card-label">เซ็นแล้ว</div>
+          <strong id="signedCount">0</strong>
+        </div>
+        <div class="summary-card unsigned-card">
+          <div class="card-icon">⏳</div>
+          <div class="card-label">คงเหลือ</div>
+          <strong id="unsignedCount">0</strong>
+        </div>
+      </div>
+      <div class="panel zone-panel">
+        <div class="zone-header">
+          <div class="zone-title-wrap">
+            <div class="zone-title-icon">📋</div>
+            <div>
+              <h2 id="summaryTableTitle">ตารางสรุปสถานะรายเขต 01–12</h2>
+              <p class="zone-subtitle" id="summaryTableSubtitle">ยังไม่เลือกเขต: แสดงรายเขต 01–12</p>
+            </div>
+          </div>
+          <div class="zone-tools">
+            <select id="summaryZoneFilter" title="เลือกเขตเพื่อดูเขตย่อย">
+              <option value="all">แสดงรายเขต 01–12</option>
+              <option value="01">เขต 01</option>
+              <option value="02">เขต 02</option>
+              <option value="03">เขต 03</option>
+              <option value="04">เขต 04</option>
+              <option value="05">เขต 05</option>
+              <option value="06">เขต 06</option>
+              <option value="07">เขต 07</option>
+              <option value="08">เขต 08</option>
+              <option value="09">เขต 09</option>
+              <option value="10">เขต 10</option>
+              <option value="11">เขต 11</option>
+              <option value="12">เขต 12</option>
+            </select>
+            <select id="summarySubZoneFilter" title="เลือกเขตย่อย">
+              <option value="all">ทุกเขตย่อย</option>
+            </select>
+            <button id="summaryClearFilterBtn" class="btn ghost small" type="button">ล้างตัวกรอง</button>
+          </div>
+          <div class="zone-legend">
+            <span><i class="legend-dot done"></i> เซ็นแล้ว</span>
+            <span><i class="legend-dot wait"></i> ยังไม่เซ็น</span>
+          </div>
+        </div>
+        <div class="summary-table-safe compact-zone-table-wrap" style="display:block!important; visibility:visible!important; opacity:1!important; min-height:320px!important;">
+          <table class="zone-table compact-zone-table">
+            <thead>
+              <tr>
+                <th id="summaryFirstCol">เขต</th>
+                <th>ทั้งหมด</th>
+                <th>เซ็นแล้ว</th>
+                <th>ยังไม่เซ็น</th>
+                <th>ความก้าวหน้า</th>
+              </tr>
+            </thead>
+            <tbody id="zoneSummaryBody">
+              <tr><td colspan="5" class="empty-cell">ยังไม่มีข้อมูล</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel unsigned-panel">
+        <div class="unsigned-head">
+          <div>
+            <h2>⏳ เอกสารคงเหลือ</h2>
+            <p id="unsignedHint">คลิกเขตในตารางด้านบนเพื่อกรองรายการเอกสาร หรือเลือกเขตย่อยจากตัวกรอง</p>
+          </div>
+          <button class="btn ghost" type="button" onclick="filterByZone('all')">แสดงทุกเขต</button>
+        </div>
+        <div id="unsignedList" class="file-list empty">ยังไม่มีข้อมูล</div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>
