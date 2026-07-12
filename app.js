@@ -467,15 +467,15 @@ function updateZoneSummary(originals){
   // หากยังไม่เลือกเขต: แสดงสรุปรายเขต 01–12
   // หากเลือกเขต: แสดงสรุปตามเขตย่อยของเขตนั้น
   if(selectedZone === "all"){
-    if(titleEl) titleEl.textContent = "ตารางสรุปสถานะรายเขต 01–12";
-    if(subtitleEl) subtitleEl.textContent = "ยังไม่เลือกเขต: แสดงรายเขตเรียงจากเขต 01 ถึงเขต 12";
+    if(titleEl) titleEl.textContent = "ตารางสรุปสถานะรายเขต 01–15 และ 90";
+    if(subtitleEl) subtitleEl.textContent = "ยังไม่เลือกเขต: แสดงรายเขต 01–15 และ 90";
     if(firstColEl) firstColEl.textContent = "เขต";
-    const zones = ["01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","90"] => String(i + 1).padStart(2, "0"));
+    const zones = ["01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","90"];
     const summary = Object.fromEntries(zones.map(z => [z, { total:0, signed:0, unsigned:0 }]));
 
     originals.forEach(file => {
       const zone = getZoneCode(file.name);
-      if(!summary[zone]) return; // ตารางนี้แสดงเฉพาะ 01–12
+      if(!summary[zone]) return; // ตารางนี้แสดงเฉพาะเขตที่กำหนด 01–15 และ 90
       if(selectedSubZone !== "all" && getSubZoneCode(file.name) !== selectedSubZone) return;
       summary[zone].total += 1;
       if(file.hasSignedCopy) summary[zone].signed += 1;
@@ -581,7 +581,7 @@ function renderDefaultSummaryTableIfEmpty(){
   }
   const hasRealRows = Array.from(body.querySelectorAll("tr")).some(tr => !tr.querySelector(".empty-cell"));
   if(hasRealRows) return;
-  const zones = ["01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","90"] => String(i + 1).padStart(2, "0"));
+  const zones = ["01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","90"];
   body.innerHTML = zones.map(zone => renderSummaryRow({
     key: zone,
     label: `เขต ${zone}`,
