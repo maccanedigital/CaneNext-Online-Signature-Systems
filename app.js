@@ -470,7 +470,7 @@ function updateZoneSummary(originals){
     if(titleEl) titleEl.textContent = "ตารางสรุปสถานะรายเขต 01–12";
     if(subtitleEl) subtitleEl.textContent = "ยังไม่เลือกเขต: แสดงรายเขตเรียงจากเขต 01 ถึงเขต 12";
     if(firstColEl) firstColEl.textContent = "เขต";
-    const zones = Array.from({length:12}, (_, i) => String(i + 1).padStart(2, "0"));
+    const zones = ["01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","90"] => String(i + 1).padStart(2, "0"));
     const summary = Object.fromEntries(zones.map(z => [z, { total:0, signed:0, unsigned:0 }]));
 
     originals.forEach(file => {
@@ -581,7 +581,7 @@ function renderDefaultSummaryTableIfEmpty(){
   }
   const hasRealRows = Array.from(body.querySelectorAll("tr")).some(tr => !tr.querySelector(".empty-cell"));
   if(hasRealRows) return;
-  const zones = Array.from({length:12}, (_, i) => String(i + 1).padStart(2, "0"));
+  const zones = ["01","02","03","04","05","06","07","08","09","10","11","12","13","14","15","90"] => String(i + 1).padStart(2, "0"));
   body.innerHTML = zones.map(zone => renderSummaryRow({
     key: zone,
     label: `เขต ${zone}`,
