@@ -1,6 +1,6 @@
 const CONFIG = Object.freeze({
   CLIENT_ID: "1071174453065-g8996697emt54ikdda7i5kv4jrrfeprg.apps.googleusercontent.com",
-  FOLDER_ID: "1y5vd_tFnhfzjDfDo3Idq6nkqhlPRPE6p",
+  FOLDER_ID: "1fWtxiMw7mbxUfH4yQvxjcVDbSwYXacZc",
   SIGNED_FOLDER_NAME: "02_Signed_PDF",
   APP_NAME: "CaneNext Online Signature System",
   SCOPES: "https://www.googleapis.com/auth/drive",
